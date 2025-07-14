@@ -70,11 +70,47 @@
       border-radius: 3px 0 0 3px;
       width: 100%;
     }
+    #settingsPanel {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 999;
+      color: white;
+    }
+    #settingsPanel input,
+    #settingsPanel textarea {
+      width: 100%;
+      margin-bottom: 10px;
+      background: #222;
+      color: white;
+      border: 1px solid #444;
+      padding: 6px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
   <div id="crosshair"></div>
   <div id="info">Zombies remaining: <span id="zcount">0</span> | Weapon: <span id="weaponName">Knife</span></div>
+
+  <!-- Settings Panel -->
+  <div id="settingsPanel">
+    <h2>Settings</h2>
+    <label>Sensitivity: <input type="number" id="sensInput" value="0.002" step="0.0001" /></label><br>
+    <label>FOV: <input type="number" id="fovInput" value="75" min="30" max="120" /></label><br>
+    <button onclick="applySettings()">Apply</button>
+    <button onclick="copySettings()">Copy</button>
+    <button onclick="pasteSettings()">Paste</button>
+    <button onclick="toggleSettings()">Close</button><br><br>
+    <textarea id="settingsText" rows="4" placeholder="Paste settings JSON here..."></textarea>
+  </div>
+
+  <button onclick="toggleSettings()" style="position:fixed; top:10px; right:10px; z-index:999; padding:6px 12px;">⚙️</button>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
   <script>
@@ -91,9 +127,6 @@
     const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
     scene.add(light);
 
-    // Floor and walls code same as before...
-
-    // Floor
     const floorSize = 20;
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(floorSize, floorSize),
@@ -102,66 +135,95 @@
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Walls
     const wallHeight = 2;
     const wallThickness = 0.5;
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
-
     const walls = [];
 
-    const frontWall = new THREE.Mesh(
-      new THREE.BoxGeometry(floorSize, wallHeight, wallThickness),
-      wallMaterial
-    );
-    frontWall.position.set(0, wallHeight / 2, floorSize / 2);
-    scene.add(frontWall);
-    walls.push(frontWall);
+    function addWall(w, h, d, x, y, z) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMaterial);
+      wall.position.set(x, y, z);
+      scene.add(wall);
+      walls.push(wall);
+    }
 
-    const backWall = new THREE.Mesh(
-      new THREE.BoxGeometry(floorSize, wallHeight, wallThickness),
-      wallMaterial
-    );
-    backWall.position.set(0, wallHeight / 2, -floorSize / 2);
-    scene.add(backWall);
-    walls.push(backWall);
+    addWall(floorSize, wallHeight, wallThickness, 0, wallHeight / 2, floorSize / 2);
+    addWall(floorSize, wallHeight, wallThickness, 0, wallHeight / 2, -floorSize / 2);
+    addWall(wallThickness, wallHeight, floorSize, -floorSize / 2, wallHeight / 2, 0);
+    addWall(wallThickness, wallHeight, floorSize, floorSize / 2, wallHeight / 2, 0);
 
-    const leftWall = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThickness, wallHeight, floorSize),
-      wallMaterial
-    );
-    leftWall.position.set(-floorSize / 2, wallHeight / 2, 0);
-    scene.add(leftWall);
-    walls.push(leftWall);
-
-    const rightWall = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThickness, wallHeight, floorSize),
-      wallMaterial
-    );
-    rightWall.position.set(floorSize / 2, wallHeight / 2, 0);
-    scene.add(rightWall);
-    walls.push(rightWall);
-
-    // Player variables and controls (same as before)
     let isLocked = false;
     let yaw = 0;
     let pitch = 0;
     const pitchLimit = Math.PI / 2 - 0.1;
     const keys = {};
-
-    // Physics for jump & gravity
     let velocityY = 0;
     const gravity = -30;
     const jumpSpeed = 10;
     const groundHeight = 1.5;
     let canJump = false;
 
-    // Zombies
+    let settings = {
+      sensitivity: 0.002,
+      fov: 75
+    };
+
+    const saved = localStorage.getItem('3dc_settings');
+    if (saved) {
+      try {
+        settings = JSON.parse(saved);
+        camera.fov = settings.fov;
+        camera.updateProjectionMatrix();
+      } catch {}
+    }
+
+    function applySettings() {
+      settings.sensitivity = parseFloat(document.getElementById('sensInput').value);
+      settings.fov = parseInt(document.getElementById('fovInput').value);
+      camera.fov = settings.fov;
+      camera.updateProjectionMatrix();
+      localStorage.setItem('3dc_settings', JSON.stringify(settings));
+    }
+
+    function updateSettingsUI() {
+      document.getElementById('sensInput').value = settings.sensitivity;
+      document.getElementById('fovInput').value = settings.fov;
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById('settingsPanel');
+      const isOpen = panel.style.display === 'block';
+      panel.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) updateSettingsUI();
+    }
+
+    function copySettings() {
+      const json = JSON.stringify(settings, null, 2);
+      navigator.clipboard.writeText(json);
+      document.getElementById('settingsText').value = json;
+    }
+
+    function pasteSettings() {
+      try {
+        const parsed = JSON.parse(document.getElementById('settingsText').value);
+        if (parsed.sensitivity && parsed.fov) {
+          settings = parsed;
+          updateSettingsUI();
+          applySettings();
+          alert('Settings imported!');
+        } else {
+          alert('Invalid format.');
+        }
+      } catch {
+        alert('Failed to parse JSON.');
+      }
+    }
+
     const zombieCount = 5;
     const zombies = [];
 
-    // Spawn zombies with HP bars
     function spawnZombies() {
-      for(let i = 0; i < zombieCount; i++) {
+      for (let i = 0; i < zombieCount; i++) {
         const zombie = new THREE.Mesh(
           new THREE.BoxGeometry(1, 1.5, 1),
           new THREE.MeshStandardMaterial({ color: 0xff0000 })
@@ -197,59 +259,42 @@
 
     spawnZombies();
 
-    // Weapons setup
     const weapons = {
       knife: {
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(0.1, 0.02, 0.5),
-          new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.7, roughness: 0.2 })
-        ),
+        mesh: new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.5), new THREE.MeshStandardMaterial({ color: 0xaaaaaa })),
         name: "Knife"
       },
       handgun: {
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(0.3, 0.2, 0.8),
-          new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5, roughness: 0.4 })
-        ),
+        mesh: new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.8), new THREE.MeshStandardMaterial({ color: 0x222222 })),
         name: "Handgun"
       },
       scar: {
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(0.6, 0.15, 1.2),
-          new THREE.MeshStandardMaterial({ color: 0x334466, metalness: 0.7, roughness: 0.3 })
-        ),
+        mesh: new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 1.2), new THREE.MeshStandardMaterial({ color: 0x334466 })),
         name: "Scar"
       }
     };
 
-    // Position weapons relative to camera
     weapons.knife.mesh.position.set(0.3, -0.3, -0.5);
     weapons.handgun.mesh.position.set(0.4, -0.25, -0.7);
     weapons.scar.mesh.position.set(0.4, -0.2, -1);
 
-    // Add all weapons to camera but hide except active
     Object.values(weapons).forEach(w => {
       camera.add(w.mesh);
       w.mesh.visible = false;
     });
 
-    // Active weapon tracker
     let activeWeapon = 'knife';
     weapons[activeWeapon].mesh.visible = true;
     document.getElementById('weaponName').textContent = weapons[activeWeapon].name;
 
-    // Function to switch weapons
-    function switchWeapon(weaponKey) {
-      if (!weapons[weaponKey]) return;
-      // Hide current
+    function switchWeapon(key) {
+      if (!weapons[key]) return;
       weapons[activeWeapon].mesh.visible = false;
-      // Show new
-      weapons[weaponKey].mesh.visible = true;
-      activeWeapon = weaponKey;
+      weapons[key].mesh.visible = true;
+      activeWeapon = key;
       document.getElementById('weaponName').textContent = weapons[activeWeapon].name;
     }
 
-    // Player health and UI
     let playerHP = 100;
     const maxHP = 100;
 
@@ -270,16 +315,14 @@
       }
       hpEl.textContent = `HP: ${playerHP} / ${maxHP}`;
     }
+
     updateHP();
-
     let gameOver = false;
-
     function endGame() {
       gameOver = true;
-      alert('Game Over! You died.');
+      alert('Game Over!');
     }
 
-    // Pointer lock controls
     window.addEventListener('click', () => {
       if (!isLocked && !gameOver) {
         document.body.requestPointerLock();
@@ -292,33 +335,25 @@
 
     document.addEventListener('mousemove', e => {
       if (!isLocked) return;
-
-      const sensitivity = 0.002;
-      yaw -= e.movementX * sensitivity;
-      pitch -= e.movementY * sensitivity;
+      yaw -= e.movementX * settings.sensitivity;
+      pitch -= e.movementY * settings.sensitivity;
       pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
     });
 
     window.addEventListener('keydown', e => {
       if (gameOver) return;
       keys[e.code] = true;
-
       if (e.code === 'Space' && canJump) {
         velocityY = jumpSpeed;
         canJump = false;
       }
-
-      // Weapon switch keys
       if (e.code === 'Digit1') switchWeapon('knife');
       if (e.code === 'Digit2') switchWeapon('handgun');
       if (e.code === 'Digit3') switchWeapon('scar');
     });
 
-    window.addEventListener('keyup', e => {
-      keys[e.code] = false;
-    });
+    window.addEventListener('keyup', e => keys[e.code] = false);
 
-    // Collision detection with walls
     function checkCollision(newPos) {
       const radius = 0.4;
       for (const wall of walls) {
@@ -326,26 +361,15 @@
         const maxX = wall.position.x + wall.geometry.parameters.width / 2 + radius;
         const minZ = wall.position.z - wall.geometry.parameters.depth / 2 - radius;
         const maxZ = wall.position.z + wall.geometry.parameters.depth / 2 + radius;
-
-        if (
-          newPos.x > minX && newPos.x < maxX &&
-          newPos.z > minZ && newPos.z < maxZ
-        ) {
-          return true;
-        }
+        if (newPos.x > minX && newPos.x < maxX && newPos.z > minZ && newPos.z < maxZ) return true;
       }
       return false;
     }
 
-    // Attack function (only knife can attack zombies for now)
     function attackZombies() {
-      if (gameOver) return;
-
-      if (activeWeapon !== 'knife') return; // Only knife attacks zombies now
-
+      if (gameOver || activeWeapon !== 'knife') return;
       const knifeRange = 1.5;
       const playerPos = camera.position;
-
       for (let i = zombies.length - 1; i >= 0; i--) {
         const zombie = zombies[i];
         const dist = zombie.position.distanceTo(playerPos);
@@ -364,28 +388,20 @@
       }
     }
 
-    // Left click attack event
     window.addEventListener('mousedown', e => {
-      if (e.button === 0 && isLocked && !gameOver) {
-        attackZombies();
-      }
+      if (e.button === 0 && isLocked && !gameOver) attackZombies();
     });
 
-    // Zombie attack variables
     const zombieAttackRange = 1.2;
     const zombieAttackDamage = 10;
-    const zombieAttackCooldown = 1.5; // seconds
+    const zombieAttackCooldown = 1.5;
     let lastZombieAttackTime = 0;
 
     let prevTime = performance.now();
 
     function animate() {
       requestAnimationFrame(animate);
-
-      if (gameOver) {
-        renderer.render(scene, camera);
-        return;
-      }
+      if (gameOver) return renderer.render(scene, camera);
 
       const time = performance.now();
       const delta = (time - prevTime) / 1000;
@@ -400,65 +416,39 @@
           dir.normalize();
           const speed = 0.7 * delta;
           const newPos = zombie.position.clone().add(dir.multiplyScalar(speed));
-          if (!checkCollision(newPos)) {
-            zombie.position.copy(newPos);
-          }
+          if (!checkCollision(newPos)) zombie.position.copy(newPos);
         }
 
-        // Update zombie HP bar position
-        const zombiePos = zombie.position.clone();
-        zombiePos.y += 1.6;
-        const screenPos = zombiePos.project(camera);
-
-        const inFront = screenPos.z > -1 && screenPos.z < 1;
-        const inViewportX = screenPos.x >= -1 && screenPos.x <= 1;
-        const inViewportY = screenPos.y >= -1 && screenPos.y <= 1;
-
-        if (inFront && inViewportX && inViewportY) {
+        const screenPos = zombie.position.clone().add(new THREE.Vector3(0, 1.6, 0)).project(camera);
+        if (screenPos.z > -1 && screenPos.z < 1 && screenPos.x >= -1 && screenPos.x <= 1 && screenPos.y >= -1 && screenPos.y <= 1) {
           const x = (screenPos.x + 1) / 2 * window.innerWidth;
           const y = (-screenPos.y + 1) / 2 * window.innerHeight;
           zombie.hpBar.style.left = `${x}px`;
           zombie.hpBar.style.top = `${y}px`;
           zombie.hpBar.style.display = 'block';
-        } else {
-          zombie.hpBar.style.display = 'none';
-        }
+        } else zombie.hpBar.style.display = 'none';
 
-        // Zombie attack player
-        if (distance <= zombieAttackRange) {
-          if (time / 1000 - lastZombieAttackTime > zombieAttackCooldown) {
-            playerHP -= zombieAttackDamage;
-            updateHP();
-            lastZombieAttackTime = time / 1000;
-
-            if (playerHP <= 0) {
-              endGame();
-            }
-          }
+        if (distance <= zombieAttackRange && time / 1000 - lastZombieAttackTime > zombieAttackCooldown) {
+          playerHP -= zombieAttackDamage;
+          updateHP();
+          lastZombieAttackTime = time / 1000;
+          if (playerHP <= 0) endGame();
         }
       });
 
-      const forwardDir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-      const rightDir = new THREE.Vector3(Math.sin(yaw - Math.PI / 2), 0, Math.cos(yaw - Math.PI / 2));
-
-      let moveVector = new THREE.Vector3();
+      const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+      const right = new THREE.Vector3(Math.sin(yaw - Math.PI / 2), 0, Math.cos(yaw - Math.PI / 2));
+      let move = new THREE.Vector3();
 
       if (isLocked) {
-        if (keys['KeyW']) moveVector.add(forwardDir);
-        if (keys['KeyS']) moveVector.sub(forwardDir);
-        if (keys['KeyA']) moveVector.sub(rightDir);
-        if (keys['KeyD']) moveVector.add(rightDir);
+        if (keys['KeyW']) move.add(forward);
+        if (keys['KeyS']) move.sub(forward);
+        if (keys['KeyA']) move.sub(right);
+        if (keys['KeyD']) move.add(right);
       }
 
-      if (moveVector.length() > 0) {
-        moveVector.normalize();
-        moveVector.multiplyScalar(0.1);
-      }
-
-      const newPosition = camera.position.clone();
-      newPosition.x += moveVector.x;
-      newPosition.z += moveVector.z;
-
+      if (move.length() > 0) move.normalize().multiplyScalar(0.1);
+      const newPosition = camera.position.clone().add(move);
       if (!checkCollision(newPosition)) {
         camera.position.x = newPosition.x;
         camera.position.z = newPosition.z;
@@ -473,21 +463,15 @@
         canJump = true;
       }
 
-      const lookDir = new THREE.Vector3(
-        Math.cos(pitch) * Math.sin(yaw),
-        Math.sin(pitch),
-        Math.cos(pitch) * Math.cos(yaw)
-      );
-      const lookAtPos = new THREE.Vector3().addVectors(camera.position, lookDir);
-      camera.lookAt(lookAtPos);
-
+      const lookDir = new THREE.Vector3(Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw));
+      camera.lookAt(camera.position.clone().add(lookDir));
       renderer.render(scene, camera);
     }
 
     animate();
 
     window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
