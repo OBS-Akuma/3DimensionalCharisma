@@ -63,6 +63,7 @@
       border: 1px solid #800000;
       pointer-events: none;
       z-index: 105;
+      transform: translate(-50%, -50%);
     }
     .hp-fill {
       height: 100%;
@@ -365,11 +366,21 @@
         const zombiePos = zombie.position.clone();
         zombiePos.y += 1.6; // slightly above head
         const screenPos = zombiePos.project(camera);
-        const x = (screenPos.x + 1) / 2 * window.innerWidth;
-        const y = (-screenPos.y + 1) / 2 * window.innerHeight;
 
-        zombie.hpBar.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
-        zombie.hpBar.style.display = screenPos.z < 1 ? 'block' : 'none';
+        // Check if zombie is in front of camera and inside viewport
+        const inFront = screenPos.z > -1 && screenPos.z < 1;
+        const inViewportX = screenPos.x >= -1 && screenPos.x <= 1;
+        const inViewportY = screenPos.y >= -1 && screenPos.y <= 1;
+
+        if (inFront && inViewportX && inViewportY) {
+          const x = (screenPos.x + 1) / 2 * window.innerWidth;
+          const y = (-screenPos.y + 1) / 2 * window.innerHeight;
+          zombie.hpBar.style.left = `${x}px`;
+          zombie.hpBar.style.top = `${y}px`;
+          zombie.hpBar.style.display = 'block';
+        } else {
+          zombie.hpBar.style.display = 'none';
+        }
 
         // Zombie attacks player if close enough and cooldown passed
         if (distance <= zombieAttackRange) {
@@ -442,3 +453,4 @@
   </script>
 </body>
 </html>
+ 
