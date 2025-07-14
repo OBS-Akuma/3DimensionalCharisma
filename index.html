@@ -14,44 +14,42 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      padding: 12px 20px;
+      padding: 14px 22px;
       font-size: 18px;
       background: #000;
       color: #fff;
       border: none;
-      cursor: pointer;
       z-index: 1;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <button id="start">Click to Start</button>
+  <button id="start">Tap to Start 3DimensionalCharisma</button>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/PointerLockControls.js"></script>
 
   <script>
-    // Core setup
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer();
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Lighting
     const light = new THREE.HemisphereLight(0xffffff, 0x444444);
     light.position.set(0, 200, 0);
     scene.add(light);
 
-    // Ground
-    const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x008800 });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(1000, 1000),
+      new THREE.MeshStandardMaterial({ color: 0x4444aa })
+    );
     ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
     scene.add(ground);
 
-    // Cube (optional object to look at)
     const cube = new THREE.Mesh(
       new THREE.BoxGeometry(2, 2, 2),
       new THREE.MeshStandardMaterial({ color: 0x00ff00 })
@@ -61,8 +59,14 @@
 
     // Controls
     const controls = new THREE.PointerLockControls(camera, document.body);
+    scene.add(controls.getObject());
 
-    document.getElementById('start').addEventListener('click', () => {
+    document.getElementById('start').addEventListener('click', async () => {
+      // Fullscreen on mobile
+      if (isMobile && document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+
       controls.lock();
     });
 
@@ -74,13 +78,10 @@
       document.getElementById('start').style.display = 'block';
     });
 
-    scene.add(controls.getObject());
-
-    // Movement logic
+    // Movement
+    const keys = {};
     const velocity = new THREE.Vector3();
     const direction = new THREE.Vector3();
-    const keys = {};
-
     document.addEventListener('keydown', (e) => keys[e.code] = true);
     document.addEventListener('keyup', (e) => keys[e.code] = false);
 
@@ -97,7 +98,7 @@
       direction.x = Number(keys['KeyD']) - Number(keys['KeyA']);
       direction.normalize();
 
-      const speed = 400.0;
+      const speed = 200.0;
       if (controls.isLocked) {
         if (direction.z !== 0) velocity.z -= direction.z * speed * delta;
         if (direction.x !== 0) velocity.x -= direction.x * speed * delta;
@@ -116,6 +117,11 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    // Optional: Touch movement fallback
+    if (isMobile) {
+      alert("Tip: Tap + drag to look around. Use external controller or WASD if available.");
+    }
   </script>
 </body>
 </html>
