@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3DimensionalCharisma – Knife Game</title>
+  <title>3DimensionalCharisma – Weapon Switch</title>
   <style>
     html, body {
       margin: 0; padding: 0; overflow: hidden; background: black; height: 100%;
@@ -53,7 +53,6 @@
       padding: 8px 12px;
       border-radius: 6px;
     }
-    /* HP bar styles */
     .hp-bar {
       position: fixed;
       width: 60px;
@@ -75,7 +74,7 @@
 </head>
 <body>
   <div id="crosshair"></div>
-  <div id="info">Zombies remaining: <span id="zcount">0</span></div>
+  <div id="info">Zombies remaining: <span id="zcount">0</span> | Weapon: <span id="weaponName">Knife</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
   <script>
@@ -91,6 +90,8 @@
 
     const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
     scene.add(light);
+
+    // Floor and walls code same as before...
 
     // Floor
     const floorSize = 20;
@@ -140,15 +141,14 @@
     scene.add(rightWall);
     walls.push(rightWall);
 
-    // Player variables
+    // Player variables and controls (same as before)
     let isLocked = false;
     let yaw = 0;
     let pitch = 0;
     const pitchLimit = Math.PI / 2 - 0.1;
-    const baseSpeed = 0.1;
     const keys = {};
 
-    // Physics variables for gravity and jump
+    // Physics for jump & gravity
     let velocityY = 0;
     const gravity = -30;
     const jumpSpeed = 10;
@@ -159,14 +159,13 @@
     const zombieCount = 5;
     const zombies = [];
 
-    // Create zombie meshes with positions around the map and add HP bars
+    // Spawn zombies with HP bars
     function spawnZombies() {
       for(let i = 0; i < zombieCount; i++) {
         const zombie = new THREE.Mesh(
           new THREE.BoxGeometry(1, 1.5, 1),
           new THREE.MeshStandardMaterial({ color: 0xff0000 })
         );
-        // Random position on the floor, avoiding spawn near player start
         let x, z;
         do {
           x = (Math.random() - 0.5) * floorSize * 0.9;
@@ -176,7 +175,6 @@
         zombie.position.set(x, 0.75, z);
         zombie.health = 100;
 
-        // Create HP bar DOM element
         const hpBar = document.createElement('div');
         hpBar.className = 'hp-bar';
         const hpFill = document.createElement('div');
@@ -199,19 +197,62 @@
 
     spawnZombies();
 
-    // Add knife to camera
-    const knifeGeometry = new THREE.BoxGeometry(0.1, 0.02, 0.5);
-    const knifeMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.7, roughness: 0.2 });
-    const knife = new THREE.Mesh(knifeGeometry, knifeMaterial);
-    knife.position.set(0.3, -0.3, -0.5);
-    camera.add(knife);
-    scene.add(camera);
+    // Weapons setup
+    const weapons = {
+      knife: {
+        mesh: new THREE.Mesh(
+          new THREE.BoxGeometry(0.1, 0.02, 0.5),
+          new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.7, roughness: 0.2 })
+        ),
+        name: "Knife"
+      },
+      handgun: {
+        mesh: new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.2, 0.8),
+          new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5, roughness: 0.4 })
+        ),
+        name: "Handgun"
+      },
+      scar: {
+        mesh: new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 0.15, 1.2),
+          new THREE.MeshStandardMaterial({ color: 0x334466, metalness: 0.7, roughness: 0.3 })
+        ),
+        name: "Scar"
+      }
+    };
 
-    // Player health
+    // Position weapons relative to camera
+    weapons.knife.mesh.position.set(0.3, -0.3, -0.5);
+    weapons.handgun.mesh.position.set(0.4, -0.25, -0.7);
+    weapons.scar.mesh.position.set(0.4, -0.2, -1);
+
+    // Add all weapons to camera but hide except active
+    Object.values(weapons).forEach(w => {
+      camera.add(w.mesh);
+      w.mesh.visible = false;
+    });
+
+    // Active weapon tracker
+    let activeWeapon = 'knife';
+    weapons[activeWeapon].mesh.visible = true;
+    document.getElementById('weaponName').textContent = weapons[activeWeapon].name;
+
+    // Function to switch weapons
+    function switchWeapon(weaponKey) {
+      if (!weapons[weaponKey]) return;
+      // Hide current
+      weapons[activeWeapon].mesh.visible = false;
+      // Show new
+      weapons[weaponKey].mesh.visible = true;
+      activeWeapon = weaponKey;
+      document.getElementById('weaponName').textContent = weapons[activeWeapon].name;
+    }
+
+    // Player health and UI
     let playerHP = 100;
     const maxHP = 100;
 
-    // Update health display
     function updateHP() {
       let hpEl = document.getElementById('hp');
       if (!hpEl) {
@@ -236,8 +277,6 @@
     function endGame() {
       gameOver = true;
       alert('Game Over! You died.');
-      // Optionally, reload or reset game
-      // location.reload();
     }
 
     // Pointer lock controls
@@ -268,13 +307,18 @@
         velocityY = jumpSpeed;
         canJump = false;
       }
+
+      // Weapon switch keys
+      if (e.code === 'Digit1') switchWeapon('knife');
+      if (e.code === 'Digit2') switchWeapon('handgun');
+      if (e.code === 'Digit3') switchWeapon('scar');
     });
 
     window.addEventListener('keyup', e => {
       keys[e.code] = false;
     });
 
-    // Simple collision detection with walls
+    // Collision detection with walls
     function checkCollision(newPos) {
       const radius = 0.4;
       for (const wall of walls) {
@@ -293,9 +337,12 @@
       return false;
     }
 
-    // Attack function - left click to attack zombies in range
+    // Attack function (only knife can attack zombies for now)
     function attackZombies() {
       if (gameOver) return;
+
+      if (activeWeapon !== 'knife') return; // Only knife attacks zombies now
+
       const knifeRange = 1.5;
       const playerPos = camera.position;
 
@@ -303,7 +350,6 @@
         const zombie = zombies[i];
         const dist = zombie.position.distanceTo(playerPos);
         if (dist <= knifeRange) {
-          // Reduce health by 50 per hit
           zombie.health -= 50;
           if (zombie.health <= 0) {
             scene.remove(zombie);
@@ -311,7 +357,6 @@
             zombies.splice(i, 1);
             updateZombieCount();
           } else {
-            // Update the HP bar fill
             const percent = Math.max(0, (zombie.health / 100) * 100);
             zombie.hpFill.style.width = percent + '%';
           }
@@ -319,7 +364,7 @@
       }
     }
 
-    // Register left mouse click to attack
+    // Left click attack event
     window.addEventListener('mousedown', e => {
       if (e.button === 0 && isLocked && !gameOver) {
         attackZombies();
@@ -347,7 +392,6 @@
       prevTime = time;
 
       zombies.forEach(zombie => {
-        // Move zombie toward player
         const dir = new THREE.Vector3().subVectors(camera.position, zombie.position);
         dir.y = 0;
         const distance = dir.length();
@@ -356,18 +400,16 @@
           dir.normalize();
           const speed = 0.7 * delta;
           const newPos = zombie.position.clone().add(dir.multiplyScalar(speed));
-
           if (!checkCollision(newPos)) {
             zombie.position.copy(newPos);
           }
         }
 
-        // Update zombie HP bar position on screen
+        // Update zombie HP bar position
         const zombiePos = zombie.position.clone();
-        zombiePos.y += 1.6; // slightly above head
+        zombiePos.y += 1.6;
         const screenPos = zombiePos.project(camera);
 
-        // Check if zombie is in front of camera and inside viewport
         const inFront = screenPos.z > -1 && screenPos.z < 1;
         const inViewportX = screenPos.x >= -1 && screenPos.x <= 1;
         const inViewportY = screenPos.y >= -1 && screenPos.y <= 1;
@@ -382,7 +424,7 @@
           zombie.hpBar.style.display = 'none';
         }
 
-        // Zombie attacks player if close enough and cooldown passed
+        // Zombie attack player
         if (distance <= zombieAttackRange) {
           if (time / 1000 - lastZombieAttackTime > zombieAttackCooldown) {
             playerHP -= zombieAttackDamage;
@@ -422,7 +464,6 @@
         camera.position.z = newPosition.z;
       }
 
-      // Gravity & jump
       velocityY += gravity * delta;
       camera.position.y += velocityY * delta;
 
@@ -453,4 +494,3 @@
   </script>
 </body>
 </html>
- 
