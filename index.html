@@ -2,127 +2,109 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3DimensionalCharisma – Debug + Controls</title>
+  <title>3DimensionalCharisma – Debug + Mouse Look</title>
   <style>
-    html, body {
-      margin: 0; padding: 0; overflow: hidden; background: black;
-    }
-    canvas {
-      display: block;
-    }
-    #instructions {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      font-family: Arial, sans-serif;
-      user-select: none;
-      cursor: pointer;
-      padding: 20px;
-      background: rgba(0,0,0,0.7);
-      border-radius: 8px;
-      z-index: 10;
-    }
+    html, body { margin: 0; padding: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000); // black sky
 
-<div id="instructions">Click to Play<br>(WASD to move, mouse to look)</div>
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 2, 5);
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/PointerLockControls.js"></script>
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-<script>
-  const instructions = document.getElementById('instructions');
+    // Lighting
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    scene.add(light);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000); // black sky
+    // Floor
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x888888 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
 
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 2, 5);
+    // Cube
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0x00ff00 })
+    );
+    cube.position.set(0, 0.5, 0);
+    scene.add(cube);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+    // Variables for mouse look
+    let yaw = 0;    // left/right rotation
+    let pitch = 0;  // up/down rotation
+    let isMouseDown = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
 
-  // Lighting
-  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
-  scene.add(hemiLight);
+    // Limit pitch so camera doesn't flip
+    const pitchLimit = Math.PI / 2 - 0.1;
 
-  // Floor
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 20),
-    new THREE.MeshStandardMaterial({ color: 0x888888 })
-  );
-  floor.rotation.x = -Math.PI / 2;
-  scene.add(floor);
+    // Event listeners
+    window.addEventListener('mousedown', (e) => {
+      isMouseDown = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    });
 
-  // Cube
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x00ff00 })
-  );
-  cube.position.set(0, 0.5, 0);
-  scene.add(cube);
+    window.addEventListener('mouseup', () => {
+      isMouseDown = false;
+    });
 
-  // Controls setup
-  const controls = new THREE.PointerLockControls(camera, document.body);
-  scene.add(controls.getObject());
+    window.addEventListener('mousemove', (e) => {
+      if (!isMouseDown) return;
 
-  instructions.addEventListener('click', () => {
-    controls.lock();
-  });
+      const movementX = e.clientX - lastMouseX;
+      const movementY = e.clientY - lastMouseY;
 
-  controls.addEventListener('lock', () => {
-    instructions.style.display = 'none';
-  });
+      // Sensitivity factor
+      const sensitivity = 0.002;
 
-  controls.addEventListener('unlock', () => {
-    instructions.style.display = '';
-  });
+      yaw -= movementX * sensitivity;
+      pitch -= movementY * sensitivity;
 
-  // Movement
-  const keys = {};
-  const velocity = new THREE.Vector3();
-  const direction = new THREE.Vector3();
-  const clock = new THREE.Clock();
+      // Clamp pitch
+      pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
 
-  document.addEventListener('keydown', e => keys[e.code] = true);
-  document.addEventListener('keyup', e => keys[e.code] = false);
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    });
 
-  function animate() {
-    requestAnimationFrame(animate);
+    function animate() {
+      requestAnimationFrame(animate);
 
-    const delta = clock.getDelta();
-    velocity.x -= velocity.x * 10.0 * delta;
-    velocity.z -= velocity.z * 10.0 * delta;
+      // Rotate cube slowly
+      cube.rotation.y += 0.01;
 
-    direction.z = Number(keys['KeyW']) - Number(keys['KeyS']);
-    direction.x = Number(keys['KeyD']) - Number(keys['KeyA']);
-    direction.normalize();
+      // Calculate new camera direction from yaw & pitch
+      const x = Math.cos(pitch) * Math.sin(yaw);
+      const y = Math.sin(pitch);
+      const z = Math.cos(pitch) * Math.cos(yaw);
 
-    const speed = 200;
+      const lookAtPos = new THREE.Vector3(camera.position.x + x, camera.position.y + y, camera.position.z + z);
+      camera.lookAt(lookAtPos);
 
-    if (controls.isLocked) {
-      if (direction.z !== 0) velocity.z -= direction.z * speed * delta;
-      if (direction.x !== 0) velocity.x -= direction.x * speed * delta;
-
-      controls.moveRight(-velocity.x * delta);
-      controls.moveForward(-velocity.z * delta);
+      renderer.render(scene, camera);
     }
 
-    renderer.render(scene, camera);
-  }
+    animate();
 
-  animate();
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-</script>
-
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
 </body>
 </html>
