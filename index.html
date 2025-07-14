@@ -2,136 +2,118 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3DimensionalCharisma – Mouse Look + Move</title>
+  <title>3DimensionalCharisma – Pointer Lock + Move</title>
   <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; background: black; }
-    canvas { display: block; }
+    html, body {
+      margin: 0; padding: 0; overflow: hidden; background: black; height: 100%;
+      cursor: pointer;
+    }
+    canvas {
+      display: block;
+    }
   </style>
 </head>
 <body>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-  <script>
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 2, 5);
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 2, 5);
 
-    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
-    scene.add(light);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 20),
-      new THREE.MeshStandardMaterial({ color: 0x888888 })
+  const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+  scene.add(light);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x888888 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+
+  const cube = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x00ff00 })
+  );
+  cube.position.set(0, 0.5, 0);
+  scene.add(cube);
+
+  let isLocked = false;
+  let yaw = 0;
+  let pitch = 0;
+  const pitchLimit = Math.PI / 2 - 0.1;
+  const moveSpeed = 0.1;
+  const keys = {};
+
+  // Request pointer lock on any click
+  window.addEventListener('click', () => {
+    if (!isLocked) {
+      document.body.requestPointerLock();
+    }
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    isLocked = document.pointerLockElement === document.body;
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!isLocked) return;
+
+    const sensitivity = 0.002;
+    yaw -= e.movementX * sensitivity;
+    pitch -= e.movementY * sensitivity;
+    pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
+  });
+
+  window.addEventListener('keydown', e => { keys[e.code] = true; });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    cube.rotation.y += 0.01;
+
+    const direction = new THREE.Vector3(
+      Math.cos(pitch) * Math.sin(yaw),
+      Math.sin(pitch),
+      Math.cos(pitch) * Math.cos(yaw)
     );
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
 
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0x00ff00 })
+    const right = new THREE.Vector3(
+      Math.sin(yaw - Math.PI / 2),
+      0,
+      Math.cos(yaw - Math.PI / 2)
     );
-    cube.position.set(0, 0.5, 0);
-    scene.add(cube);
 
-    // Mouse look variables
-    let yaw = 0;
-    let pitch = 0;
-    let isMouseDown = false;
-    let lastMouseX = 0;
-    let lastMouseY = 0;
-    const pitchLimit = Math.PI / 2 - 0.1;
-
-    window.addEventListener('mousedown', e => {
-      isMouseDown = true;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-    });
-
-    window.addEventListener('mouseup', () => {
-      isMouseDown = false;
-    });
-
-    window.addEventListener('mousemove', e => {
-      if (!isMouseDown) return;
-
-      const movementX = e.clientX - lastMouseX;
-      const movementY = e.clientY - lastMouseY;
-      const sensitivity = 0.002;
-
-      yaw -= movementX * sensitivity;
-      pitch -= movementY * sensitivity;
-
-      pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
-
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-    });
-
-    // Movement variables
-    const keys = {};
-    window.addEventListener('keydown', e => { keys[e.code] = true; });
-    window.addEventListener('keyup', e => { keys[e.code] = false; });
-
-    const moveSpeed = 0.1;
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      // Rotate cube slowly
-      cube.rotation.y += 0.01;
-
-      // Calculate direction vector from yaw & pitch
-      const direction = new THREE.Vector3(
-        Math.cos(pitch) * Math.sin(yaw),
-        Math.sin(pitch),
-        Math.cos(pitch) * Math.cos(yaw)
-      );
-
-      // Calculate right vector for strafing
-      const right = new THREE.Vector3(
-        Math.sin(yaw - Math.PI / 2),
-        0,
-        Math.cos(yaw - Math.PI / 2)
-      );
-
-      // Move forward/backward
-      if (keys['KeyW']) {
-        camera.position.add(direction.clone().multiplyScalar(moveSpeed));
-      }
-      if (keys['KeyS']) {
-        camera.position.add(direction.clone().multiplyScalar(-moveSpeed));
-      }
-
-      // Strafe left/right
-      if (keys['KeyA']) {
-        camera.position.add(right.clone().multiplyScalar(-moveSpeed));
-      }
-      if (keys['KeyD']) {
-        camera.position.add(right.clone().multiplyScalar(moveSpeed));
-      }
-
-      // Prevent camera from going below floor (y=1.5 roughly)
-      if (camera.position.y < 1.5) camera.position.y = 1.5;
-
-      // Camera looks in the direction
-      const lookAtPos = new THREE.Vector3().addVectors(camera.position, direction);
-      camera.lookAt(lookAtPos);
-
-      renderer.render(scene, camera);
+    if (isLocked) {
+      if (keys['KeyW']) camera.position.add(direction.clone().multiplyScalar(moveSpeed));
+      if (keys['KeyS']) camera.position.add(direction.clone().multiplyScalar(-moveSpeed));
+      if (keys['KeyA']) camera.position.add(right.clone().multiplyScalar(-moveSpeed));
+      if (keys['KeyD']) camera.position.add(right.clone().multiplyScalar(moveSpeed));
     }
 
-    animate();
+    if (camera.position.y < 1.5) camera.position.y = 1.5;
 
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
+    const lookAtPos = new THREE.Vector3().addVectors(camera.position, direction);
+    camera.lookAt(lookAtPos);
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+
 </body>
 </html>
