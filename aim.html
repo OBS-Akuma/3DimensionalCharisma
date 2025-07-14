@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3D Aim Trainer Enhanced</title>
+  <title>3D Aim Trainer with Pointer Lock & Customization</title>
   <style>
-    body {
+    html, body {
       margin: 0;
       overflow: hidden;
+      height: 100%;
       background: #111;
       font-family: Arial, sans-serif;
       color: white;
       user-select: none;
+      cursor: none; /* We'll draw custom cursor */
     }
     #settings {
       position: fixed;
@@ -19,18 +21,22 @@
       background: rgba(0,0,0,0.75);
       padding: 15px;
       border-radius: 8px;
-      width: 240px;
-      z-index: 10;
+      width: 260px;
+      z-index: 20;
     }
     #settings label {
       display: block;
       margin-bottom: 6px;
       font-size: 14px;
     }
-    #settings input[type=range], #settings select {
+    #settings input[type=range], #settings select, #settings input[type=text] {
       width: 100%;
       margin-bottom: 10px;
       cursor: pointer;
+      box-sizing: border-box;
+      padding: 5px;
+      border-radius: 4px;
+      border: none;
     }
     #scoreboard, #timer {
       position: fixed;
@@ -40,7 +46,7 @@
       padding: 10px 15px;
       border-radius: 8px;
       font-size: 20px;
-      z-index: 10;
+      z-index: 20;
       user-select: none;
     }
     #timer {
@@ -74,7 +80,7 @@
       margin-left: -15px;
       margin-top: -15px;
       pointer-events: none;
-      z-index: 9;
+      z-index: 15;
     }
     #crosshair:before, #crosshair:after {
       content: '';
@@ -93,8 +99,14 @@
       width: 30px;
       height: 2px;
     }
-    canvas {
-      display: block;
+    #customCursor {
+      position: fixed;
+      width: 32px;
+      height: 32px;
+      pointer-events: none;
+      z-index: 30;
+      mix-blend-mode: difference;
+      display: none; /* Initially hidden until pointer lock active */
     }
   </style>
 </head>
@@ -119,16 +131,28 @@
     <label>Session Length (seconds): <span id="sessionLengthVal">60</span></label>
     <input type="range" id="sessionLength" min="10" max="300" value="60" />
 
+    <label>Mouse Sensitivity: <span id="sensitivityVal">1</span></label>
+    <input type="range" id="sensitivity" min="0.1" max="5" step="0.1" value="1" />
+
+    <label>Custom Background URL:</label>
+    <input type="text" id="bgUrl" placeholder="https://example.com/bg.jpg" />
+
+    <label>Custom Cursor URL (32x32 px recommended):</label>
+    <input type="text" id="cursorUrl" placeholder="https://example.com/cursor.png" />
+
     <div id="controls">
       <button id="startBtn">Start</button>
       <button id="pauseBtn" disabled>Pause</button>
       <button id="resetBtn">Reset</button>
+      <button id="lockPointerBtn">Lock Pointer</button>
+      <button id="unlockPointerBtn" disabled>Unlock Pointer</button>
     </div>
   </div>
 
   <div id="scoreboard">Score: 0</div>
   <div id="timer">Time: 60</div>
   <div id="crosshair"></div>
+  <img id="customCursor" src="" alt="Custom Cursor" />
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
   <script>
@@ -141,13 +165,23 @@
     let timeLeft = sessionLength;
     let timerInterval;
     let gameRunning = false;
-    
+
+    let sensitivity = 1;
+    let pointerLocked = false;
+
+    // Virtual camera rotation state for pointer lock control
+    let rotationX = 0; // up/down
+    let rotationY = 0; // left/right
+
     // Settings elements
     const targetCountInput = document.getElementById('targetCount');
     const targetSizeInput = document.getElementById('targetSize');
     const spawnSpeedInput = document.getElementById('spawnSpeed');
     const difficultySelect = document.getElementById('difficulty');
     const sessionLengthInput = document.getElementById('sessionLength');
+    const sensitivityInput = document.getElementById('sensitivity');
+    const bgUrlInput = document.getElementById('bgUrl');
+    const cursorUrlInput = document.getElementById('cursorUrl');
 
     const scoreDisplay = document.getElementById('scoreboard');
     const timerDisplay = document.getElementById('timer');
@@ -155,10 +189,15 @@
     const targetSizeVal = document.getElementById('targetSizeVal');
     const spawnSpeedVal = document.getElementById('spawnSpeedVal');
     const sessionLengthVal = document.getElementById('sessionLengthVal');
+    const sensitivityVal = document.getElementById('sensitivityVal');
 
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const lockPointerBtn = document.getElementById('lockPointerBtn');
+    const unlockPointerBtn = document.getElementById('unlockPointerBtn');
+
+    const customCursorImg = document.getElementById('customCursor');
 
     function init() {
       scene = new THREE.Scene();
@@ -176,6 +215,9 @@
       window.addEventListener('resize', onWindowResize, false);
       window.addEventListener('click', onClick, false);
 
+      document.addEventListener('pointerlockchange', onPointerLockChange, false);
+      document.addEventListener('mousemove', onMouseMove, false);
+
       updateSettingsValues();
       createTargets(parseInt(targetCountInput.value));
       updateScore(0);
@@ -189,6 +231,7 @@
       targetSizeVal.textContent = targetSizeInput.value;
       spawnSpeedVal.textContent = spawnSpeedInput.value;
       sessionLengthVal.textContent = sessionLengthInput.value;
+      sensitivityVal.textContent = sensitivityInput.value;
     }
 
     function onWindowResize() {
@@ -253,14 +296,10 @@
     }
 
     function onClick(event) {
-      if (!gameRunning) return; // ignore clicks if game is paused/stopped
+      if (!gameRunning || !pointerLocked) return; // only when game running & pointer locked
 
-      event.preventDefault();
-
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, camera);
+      // Use center of screen for aiming since pointer is locked
+      raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
 
       const intersects = raycaster.intersectObjects(targets);
       if(intersects.length > 0) {
@@ -268,7 +307,6 @@
         score++;
         updateScore(score);
 
-        // Respawn hit target with new color in case difficulty changed mid-game
         hitTarget.material.color.set(getColorForDifficulty());
         randomizeTargetPosition(hitTarget);
       }
@@ -289,7 +327,6 @@
       const speed = parseFloat(spawnSpeedInput.value) * 1000;
       spawnInterval = setInterval(() => {
         if (!gameRunning) return;
-        // Remove excess targets if needed
         while(targets.length > parseInt(targetCountInput.value)) {
           const t = targets.pop();
           scene.remove(t);
@@ -309,11 +346,16 @@
         timerDisplay.textContent = `Time: ${timeLeft}`;
       } else {
         stopGame();
+        alert(`Time's up! Your score: ${score}`);
       }
     }
 
     function startGame() {
       if(gameRunning) return;
+      if (!pointerLocked) {
+        alert("Please lock pointer first to start.");
+        return;
+      }
       gameRunning = true;
       startSpawning();
       timerInterval = setInterval(countdown, 1000);
@@ -324,6 +366,11 @@
       spawnSpeedInput.disabled = true;
       difficultySelect.disabled = true;
       sessionLengthInput.disabled = true;
+      sensitivityInput.disabled = true;
+      bgUrlInput.disabled = true;
+      cursorUrlInput.disabled = true;
+      lockPointerBtn.disabled = true;
+      unlockPointerBtn.disabled = false;
     }
 
     function pauseGame() {
@@ -347,6 +394,11 @@
       spawnSpeedInput.disabled = false;
       difficultySelect.disabled = false;
       sessionLengthInput.disabled = false;
+      sensitivityInput.disabled = false;
+      bgUrlInput.disabled = false;
+      cursorUrlInput.disabled = false;
+      lockPointerBtn.disabled = false;
+      unlockPointerBtn.disabled = true;
     }
 
     function resetGame() {
@@ -359,12 +411,61 @@
     function animate() {
       requestAnimationFrame(animate);
 
+      // Rotate targets
       targets.forEach(t => {
         t.rotation.x += 0.01;
         t.rotation.y += 0.01;
       });
 
       renderer.render(scene, camera);
+
+      // Update custom cursor position (center of screen, but invisible since pointer locked)
+      if (pointerLocked) {
+        customCursorImg.style.display = 'block';
+        // We'll keep it centered because pointer lock hides cursor
+        customCursorImg.style.left = window.innerWidth/2 - customCursorImg.width/2 + 'px';
+        customCursorImg.style.top = window.innerHeight/2 - customCursorImg.height/2 + 'px';
+      } else {
+        customCursorImg.style.display = 'none';
+      }
+    }
+
+    // Pointer lock handlers
+    function onPointerLockChange() {
+      pointerLocked = document.pointerLockElement === renderer.domElement;
+      if(pointerLocked) {
+        console.log("Pointer locked");
+        customCursorImg.style.display = 'block';
+        lockPointerBtn.disabled = true;
+        unlockPointerBtn.disabled = false;
+      } else {
+        console.log("Pointer unlocked");
+        customCursorImg.style.display = 'none';
+        lockPointerBtn.disabled = false;
+        unlockPointerBtn.disabled = true;
+        pauseGame(); // pause on unlock for safety
+      }
+    }
+
+    function onMouseMove(event) {
+      if(!pointerLocked) return;
+      // Use movementX and movementY for relative movement
+      const movementX = event.movementX || 0;
+      const movementY = event.movementY || 0;
+
+      const sens = parseFloat(sensitivityInput.value);
+
+      rotationY -= movementX * 0.002 * sens; // left/right
+      rotationX -= movementY * 0.002 * sens; // up/down
+
+      // Clamp vertical rotation between -85 and 85 degrees
+      const maxRotationX = Math.PI/2 * 0.95;
+      if(rotationX > maxRotationX) rotationX = maxRotationX;
+      if(rotationX < -maxRotationX) rotationX = -maxRotationX;
+
+      // Apply rotations to camera
+      camera.rotation.x = rotationX;
+      camera.rotation.y = rotationY;
     }
 
     // UI Event listeners
@@ -395,9 +496,40 @@
       sessionLengthVal.textContent = sessionLengthInput.value;
       if(!gameRunning) updateTimer(parseInt(sessionLengthInput.value));
     });
+    sensitivityInput.addEventListener('input', () => {
+      sensitivityVal.textContent = sensitivityInput.value;
+    });
+
+    bgUrlInput.addEventListener('change', () => {
+      const url = bgUrlInput.value.trim();
+      if(url) {
+        document.body.style.backgroundImage = `url(${url})`;
+        document.body.style.backgroundSize = 'cover';
+        document.body.style.backgroundPosition = 'center';
+      } else {
+        document.body.style.backgroundImage = '';
+      }
+    });
+
+    cursorUrlInput.addEventListener('change', () => {
+      const url = cursorUrlInput.value.trim();
+      if(url) {
+        customCursorImg.src = url;
+      } else {
+        customCursorImg.src = '';
+        customCursorImg.style.display = 'none';
+      }
+    });
+
     startBtn.addEventListener('click', startGame);
     pauseBtn.addEventListener('click', pauseGame);
     resetBtn.addEventListener('click', resetGame);
+    lockPointerBtn.addEventListener('click', () => {
+      renderer.domElement.requestPointerLock();
+    });
+    unlockPointerBtn.addEventListener('click', () => {
+      document.exitPointerLock();
+    });
 
     init();
   </script>
