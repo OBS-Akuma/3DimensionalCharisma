@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3D Aim Trainer with Pointer Lock & Customization</title>
+  <title>3D Aim Trainer with Auto Pointer Lock on Start</title>
   <style>
+    /* same styles as before except: remove lock/unlock buttons from #settings */
     html, body {
       margin: 0;
       overflow: hidden;
@@ -12,7 +13,7 @@
       font-family: Arial, sans-serif;
       color: white;
       user-select: none;
-      cursor: none; /* We'll draw custom cursor */
+      cursor: none;
     }
     #settings {
       position: fixed;
@@ -106,12 +107,13 @@
       pointer-events: none;
       z-index: 30;
       mix-blend-mode: difference;
-      display: none; /* Initially hidden until pointer lock active */
+      display: none;
     }
   </style>
 </head>
 <body>
   <div id="settings">
+    <!-- same inputs as before, but remove lock/unlock pointer buttons -->
     <label>Targets Count: <span id="targetCountVal">5</span></label>
     <input type="range" id="targetCount" min="1" max="20" value="5" />
 
@@ -144,8 +146,6 @@
       <button id="startBtn">Start</button>
       <button id="pauseBtn" disabled>Pause</button>
       <button id="resetBtn">Reset</button>
-      <button id="lockPointerBtn">Lock Pointer</button>
-      <button id="unlockPointerBtn" disabled>Unlock Pointer</button>
     </div>
   </div>
 
@@ -194,8 +194,6 @@
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const resetBtn = document.getElementById('resetBtn');
-    const lockPointerBtn = document.getElementById('lockPointerBtn');
-    const unlockPointerBtn = document.getElementById('unlockPointerBtn');
 
     const customCursorImg = document.getElementById('customCursor');
 
@@ -350,12 +348,28 @@
       }
     }
 
+    // New startGame requests pointer lock first, then starts game if granted
     function startGame() {
       if(gameRunning) return;
-      if (!pointerLocked) {
-        alert("Please lock pointer first to start.");
-        return;
+      renderer.domElement.requestPointerLock();
+    }
+
+    // This listens for pointer lock change to start or cancel game start
+    function onPointerLockChange() {
+      pointerLocked = document.pointerLockElement === renderer.domElement;
+      if(pointerLocked) {
+        console.log("Pointer locked");
+        customCursorImg.style.display = 'block';
+        runGameStart(); // start timer and spawning now that pointer is locked
+      } else {
+        console.log("Pointer unlocked");
+        customCursorImg.style.display = 'none';
+        pauseGame();
       }
+    }
+
+    // Actually start the timer and spawning after pointer lock is confirmed
+    function runGameStart() {
       gameRunning = true;
       startSpawning();
       timerInterval = setInterval(countdown, 1000);
@@ -369,8 +383,6 @@
       sensitivityInput.disabled = true;
       bgUrlInput.disabled = true;
       cursorUrlInput.disabled = true;
-      lockPointerBtn.disabled = true;
-      unlockPointerBtn.disabled = false;
     }
 
     function pauseGame() {
@@ -397,8 +409,6 @@
       sensitivityInput.disabled = false;
       bgUrlInput.disabled = false;
       cursorUrlInput.disabled = false;
-      lockPointerBtn.disabled = false;
-      unlockPointerBtn.disabled = true;
     }
 
     function resetGame() {
@@ -411,7 +421,6 @@
     function animate() {
       requestAnimationFrame(animate);
 
-      // Rotate targets
       targets.forEach(t => {
         t.rotation.x += 0.01;
         t.rotation.y += 0.01;
@@ -419,10 +428,8 @@
 
       renderer.render(scene, camera);
 
-      // Update custom cursor position (center of screen, but invisible since pointer locked)
       if (pointerLocked) {
         customCursorImg.style.display = 'block';
-        // We'll keep it centered because pointer lock hides cursor
         customCursorImg.style.left = window.innerWidth/2 - customCursorImg.width/2 + 'px';
         customCursorImg.style.top = window.innerHeight/2 - customCursorImg.height/2 + 'px';
       } else {
@@ -430,45 +437,25 @@
       }
     }
 
-    // Pointer lock handlers
-    function onPointerLockChange() {
-      pointerLocked = document.pointerLockElement === renderer.domElement;
-      if(pointerLocked) {
-        console.log("Pointer locked");
-        customCursorImg.style.display = 'block';
-        lockPointerBtn.disabled = true;
-        unlockPointerBtn.disabled = false;
-      } else {
-        console.log("Pointer unlocked");
-        customCursorImg.style.display = 'none';
-        lockPointerBtn.disabled = false;
-        unlockPointerBtn.disabled = true;
-        pauseGame(); // pause on unlock for safety
-      }
-    }
-
     function onMouseMove(event) {
       if(!pointerLocked) return;
-      // Use movementX and movementY for relative movement
       const movementX = event.movementX || 0;
       const movementY = event.movementY || 0;
 
       const sens = parseFloat(sensitivityInput.value);
 
-      rotationY -= movementX * 0.002 * sens; // left/right
-      rotationX -= movementY * 0.002 * sens; // up/down
+      rotationY -= movementX * 0.002 * sens;
+      rotationX -= movementY * 0.002 * sens;
 
-      // Clamp vertical rotation between -85 and 85 degrees
       const maxRotationX = Math.PI/2 * 0.95;
       if(rotationX > maxRotationX) rotationX = maxRotationX;
       if(rotationX < -maxRotationX) rotationX = -maxRotationX;
 
-      // Apply rotations to camera
       camera.rotation.x = rotationX;
       camera.rotation.y = rotationY;
     }
 
-    // UI Event listeners
+    // UI Event listeners same as before
     targetCountInput.addEventListener('input', () => {
       targetCountVal.textContent = targetCountInput.value;
       if (!gameRunning) createTargets(parseInt(targetCountInput.value));
@@ -524,12 +511,6 @@
     startBtn.addEventListener('click', startGame);
     pauseBtn.addEventListener('click', pauseGame);
     resetBtn.addEventListener('click', resetGame);
-    lockPointerBtn.addEventListener('click', () => {
-      renderer.domElement.requestPointerLock();
-    });
-    unlockPointerBtn.addEventListener('click', () => {
-      document.exitPointerLock();
-    });
 
     init();
   </script>
