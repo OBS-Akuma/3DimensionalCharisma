@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3D Aim Trainer with Auto Pointer Lock on Start</title>
+  <title>3D Aim Trainer - Timer starts on first hit</title>
   <style>
-    /* same styles as before except: remove lock/unlock buttons from #settings */
     html, body {
       margin: 0;
       overflow: hidden;
@@ -30,7 +29,9 @@
       margin-bottom: 6px;
       font-size: 14px;
     }
-    #settings input[type=range], #settings select, #settings input[type=text] {
+    #settings input[type=range],
+    #settings select,
+    #settings input[type=text] {
       width: 100%;
       margin-bottom: 10px;
       cursor: pointer;
@@ -113,7 +114,6 @@
 </head>
 <body>
   <div id="settings">
-    <!-- same inputs as before, but remove lock/unlock pointer buttons -->
     <label>Targets Count: <span id="targetCountVal">5</span></label>
     <input type="range" id="targetCount" min="1" max="20" value="5" />
 
@@ -156,24 +156,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
   <script>
-    let scene, camera, renderer;
-    let raycaster, mouse;
-    let targets = [];
-    let score = 0;
-    let spawnInterval;
-    let sessionLength = 60;
-    let timeLeft = sessionLength;
-    let timerInterval;
-    let gameRunning = false;
-
-    let sensitivity = 1;
-    let pointerLocked = false;
-
-    // Virtual camera rotation state for pointer lock control
-    let rotationX = 0; // up/down
-    let rotationY = 0; // left/right
-
-    // Settings elements
     const targetCountInput = document.getElementById('targetCount');
     const targetSizeInput = document.getElementById('targetSize');
     const spawnSpeedInput = document.getElementById('spawnSpeed');
@@ -182,47 +164,29 @@
     const sensitivityInput = document.getElementById('sensitivity');
     const bgUrlInput = document.getElementById('bgUrl');
     const cursorUrlInput = document.getElementById('cursorUrl');
-
-    const scoreDisplay = document.getElementById('scoreboard');
-    const timerDisplay = document.getElementById('timer');
     const targetCountVal = document.getElementById('targetCountVal');
     const targetSizeVal = document.getElementById('targetSizeVal');
     const spawnSpeedVal = document.getElementById('spawnSpeedVal');
     const sessionLengthVal = document.getElementById('sessionLengthVal');
     const sensitivityVal = document.getElementById('sensitivityVal');
-
+    const scoreDisplay = document.getElementById('scoreboard');
+    const timerDisplay = document.getElementById('timer');
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const resetBtn = document.getElementById('resetBtn');
-
     const customCursorImg = document.getElementById('customCursor');
 
-    function init() {
-      scene = new THREE.Scene();
-
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-      camera.position.z = 10;
-
-      renderer = new THREE.WebGLRenderer({antialias:true});
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-
-      raycaster = new THREE.Raycaster();
-      mouse = new THREE.Vector2();
-
-      window.addEventListener('resize', onWindowResize, false);
-      window.addEventListener('click', onClick, false);
-
-      document.addEventListener('pointerlockchange', onPointerLockChange, false);
-      document.addEventListener('mousemove', onMouseMove, false);
-
-      updateSettingsValues();
-      createTargets(parseInt(targetCountInput.value));
-      updateScore(0);
-      updateTimer(sessionLength);
-      stopGame();
-      animate();
-    }
+    let scene, camera, renderer;
+    let targets = [];
+    let score = 0;
+    let timeLeft = 60;
+    let timerInterval;
+    let spawnInterval;
+    let gameRunning = false;
+    let timerStarted = false;
+    let pointerLocked = false;
+    let rotationX = 0, rotationY = 0;
+    const raycaster = new THREE.Raycaster();
 
     function updateSettingsValues() {
       targetCountVal.textContent = targetCountInput.value;
@@ -232,28 +196,22 @@
       sensitivityVal.textContent = sensitivityInput.value;
     }
 
-    function onWindowResize() {
-      camera.aspect = window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    function updateScore(val) {
+      score = val;
+      scoreDisplay.textContent = `Score: ${score}`;
     }
 
-    function createTarget(size) {
-      const geometry = new THREE.SphereGeometry(size, 16, 16);
-      const material = new THREE.MeshBasicMaterial({color: getColorForDifficulty()});
-      const target = new THREE.Mesh(geometry, material);
-      
-      randomizeTargetPosition(target);
-      scene.add(target);
-      return target;
+    function updateTimer(val) {
+      timeLeft = val;
+      timerDisplay.textContent = `Time: ${timeLeft}`;
     }
 
     function getColorForDifficulty() {
-      switch(difficultySelect.value) {
-        case 'medium': return 0xffa500; // orange
-        case 'hard': return 0xffff00;   // yellow
-        default: return 0xff4444;       // red for easy
-      }
+      return {
+        easy: 0xff4444,
+        medium: 0xffa500,
+        hard: 0xffff00
+      }[difficultySelect.value] || 0xff4444;
     }
 
     function randomizeTargetPosition(target) {
@@ -265,252 +223,190 @@
       );
     }
 
+    function createTarget(size) {
+      const geometry = new THREE.SphereGeometry(size, 16, 16);
+      const material = new THREE.MeshBasicMaterial({ color: getColorForDifficulty() });
+      const target = new THREE.Mesh(geometry, material);
+      randomizeTargetPosition(target);
+      scene.add(target);
+      return target;
+    }
+
     function createTargets(count) {
       clearTargets();
       const size = parseFloat(targetSizeInput.value);
-      for(let i=0; i < count; i++) {
-        const target = createTarget(size);
-        targets.push(target);
+      for (let i = 0; i < count; i++) {
+        targets.push(createTarget(size));
       }
     }
 
     function clearTargets() {
-      for(let t of targets) {
+      targets.forEach(t => {
         scene.remove(t);
         t.geometry.dispose();
         t.material.dispose();
-      }
+      });
       targets = [];
     }
 
-    function updateScore(value) {
-      score = value;
-      scoreDisplay.textContent = `Score: ${score}`;
-    }
-
-    function updateTimer(value) {
-      timeLeft = value;
-      timerDisplay.textContent = `Time: ${timeLeft}`;
-    }
-
-    function onClick(event) {
-      if (!gameRunning || !pointerLocked) return; // only when game running & pointer locked
-
-      // Use center of screen for aiming since pointer is locked
-      raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-
-      const intersects = raycaster.intersectObjects(targets);
-      if(intersects.length > 0) {
-        const hitTarget = intersects[0].object;
-        score++;
-        updateScore(score);
-
-        hitTarget.material.color.set(getColorForDifficulty());
-        randomizeTargetPosition(hitTarget);
-      }
-    }
-
     function spawnTarget() {
-      if (!gameRunning) return;
-      
-      if(targets.length < parseInt(targetCountInput.value)) {
-        const size = parseFloat(targetSizeInput.value);
-        const newTarget = createTarget(size);
-        targets.push(newTarget);
-      }
+      const size = parseFloat(targetSizeInput.value);
+      targets.push(createTarget(size));
     }
 
     function startSpawning() {
       clearInterval(spawnInterval);
-      const speed = parseFloat(spawnSpeedInput.value) * 1000;
       spawnInterval = setInterval(() => {
-        if (!gameRunning) return;
-        while(targets.length > parseInt(targetCountInput.value)) {
-          const t = targets.pop();
-          scene.remove(t);
-          t.geometry.dispose();
-          t.material.dispose();
-        }
-        if(targets.length < parseInt(targetCountInput.value)) {
-          spawnTarget();
-        }
-      }, speed);
+        if (targets.length < parseInt(targetCountInput.value)) spawnTarget();
+      }, parseFloat(spawnSpeedInput.value) * 1000);
     }
 
-    function countdown() {
-      if (!gameRunning) return;
-      if(timeLeft > 0) {
-        timeLeft--;
-        timerDisplay.textContent = `Time: ${timeLeft}`;
-      } else {
-        stopGame();
-        alert(`Time's up! Your score: ${score}`);
-      }
-    }
-
-    // New startGame requests pointer lock first, then starts game if granted
-    function startGame() {
-      if(gameRunning) return;
-      renderer.domElement.requestPointerLock();
-    }
-
-    // This listens for pointer lock change to start or cancel game start
-    function onPointerLockChange() {
-      pointerLocked = document.pointerLockElement === renderer.domElement;
-      if(pointerLocked) {
-        console.log("Pointer locked");
-        customCursorImg.style.display = 'block';
-        runGameStart(); // start timer and spawning now that pointer is locked
-      } else {
-        console.log("Pointer unlocked");
-        customCursorImg.style.display = 'none';
-        pauseGame();
-      }
-    }
-
-    // Actually start the timer and spawning after pointer lock is confirmed
-    function runGameStart() {
-      gameRunning = true;
+    function startTimerAndSpawning() {
+      timerStarted = true;
       startSpawning();
-      timerInterval = setInterval(countdown, 1000);
-      startBtn.disabled = true;
-      pauseBtn.disabled = false;
-      targetCountInput.disabled = true;
-      targetSizeInput.disabled = true;
-      spawnSpeedInput.disabled = true;
-      difficultySelect.disabled = true;
-      sessionLengthInput.disabled = true;
-      sensitivityInput.disabled = true;
-      bgUrlInput.disabled = true;
-      cursorUrlInput.disabled = true;
+      timerInterval = setInterval(() => {
+        if (--timeLeft <= 0) {
+          stopGame();
+          alert(`Time's up! Your score: ${score}`);
+        }
+        updateTimer(timeLeft);
+      }, 1000);
     }
 
-    function pauseGame() {
-      if(!gameRunning) return;
-      gameRunning = false;
-      clearInterval(spawnInterval);
-      clearInterval(timerInterval);
-      startBtn.disabled = false;
-      pauseBtn.disabled = true;
+    function startGame() {
+      if (gameRunning) return;
+      gameRunning = true;
+      timerStarted = false;
+      updateScore(0);
+      updateTimer(parseInt(sessionLengthInput.value));
+      createTargets(parseInt(targetCountInput.value));
+      renderer.domElement.requestPointerLock();
     }
 
     function stopGame() {
       gameRunning = false;
-      clearInterval(spawnInterval);
       clearInterval(timerInterval);
-      updateTimer(parseInt(sessionLengthInput.value));
-      startBtn.disabled = false;
-      pauseBtn.disabled = true;
-      targetCountInput.disabled = false;
-      targetSizeInput.disabled = false;
-      spawnSpeedInput.disabled = false;
-      difficultySelect.disabled = false;
-      sessionLengthInput.disabled = false;
-      sensitivityInput.disabled = false;
-      bgUrlInput.disabled = false;
-      cursorUrlInput.disabled = false;
+      clearInterval(spawnInterval);
+      timerStarted = false;
+    }
+
+    function pauseGame() {
+      stopGame();
     }
 
     function resetGame() {
       pauseGame();
       updateScore(0);
-      createTargets(parseInt(targetCountInput.value));
       updateTimer(parseInt(sessionLengthInput.value));
+      createTargets(parseInt(targetCountInput.value));
     }
 
-    function animate() {
-      requestAnimationFrame(animate);
-
-      targets.forEach(t => {
-        t.rotation.x += 0.01;
-        t.rotation.y += 0.01;
-      });
-
-      renderer.render(scene, camera);
-
-      if (pointerLocked) {
-        customCursorImg.style.display = 'block';
-        customCursorImg.style.left = window.innerWidth/2 - customCursorImg.width/2 + 'px';
-        customCursorImg.style.top = window.innerHeight/2 - customCursorImg.height/2 + 'px';
-      } else {
-        customCursorImg.style.display = 'none';
+    function onClick() {
+      if (!gameRunning || !pointerLocked) return;
+      raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+      const intersects = raycaster.intersectObjects(targets);
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        updateScore(score + 1);
+        hit.material.color.set(getColorForDifficulty());
+        randomizeTargetPosition(hit);
+        if (!timerStarted) startTimerAndSpawning();
       }
     }
 
-    function onMouseMove(event) {
-      if(!pointerLocked) return;
-      const movementX = event.movementX || 0;
-      const movementY = event.movementY || 0;
-
+    function onMouseMove(e) {
+      if (!pointerLocked) return;
       const sens = parseFloat(sensitivityInput.value);
-
-      rotationY -= movementX * 0.002 * sens;
-      rotationX -= movementY * 0.002 * sens;
-
-      const maxRotationX = Math.PI/2 * 0.95;
-      if(rotationX > maxRotationX) rotationX = maxRotationX;
-      if(rotationX < -maxRotationX) rotationX = -maxRotationX;
-
+      rotationY -= e.movementX * 0.002 * sens;
+      rotationX -= e.movementY * 0.002 * sens;
+      const maxX = Math.PI / 2 * 0.95;
+      rotationX = Math.max(-maxX, Math.min(maxX, rotationX));
       camera.rotation.x = rotationX;
       camera.rotation.y = rotationY;
     }
 
-    // UI Event listeners same as before
-    targetCountInput.addEventListener('input', () => {
-      targetCountVal.textContent = targetCountInput.value;
-      if (!gameRunning) createTargets(parseInt(targetCountInput.value));
-    });
-    targetSizeInput.addEventListener('input', () => {
-      targetSizeVal.textContent = targetSizeInput.value;
-      if (!gameRunning) {
-        targets.forEach(t => {
-          t.scale.setScalar(parseFloat(targetSizeInput.value));
-        });
-      }
-    });
-    spawnSpeedInput.addEventListener('input', () => {
-      spawnSpeedVal.textContent = spawnSpeedInput.value;
-      if(gameRunning) startSpawning();
-    });
-    difficultySelect.addEventListener('change', () => {
-      if(!gameRunning) {
-        targets.forEach(t => {
-          t.material.color.set(getColorForDifficulty());
-        });
-      }
-    });
-    sessionLengthInput.addEventListener('input', () => {
-      sessionLengthVal.textContent = sessionLengthInput.value;
-      if(!gameRunning) updateTimer(parseInt(sessionLengthInput.value));
-    });
-    sensitivityInput.addEventListener('input', () => {
-      sensitivityVal.textContent = sensitivityInput.value;
-    });
+    function onPointerLockChange() {
+      pointerLocked = document.pointerLockElement === renderer.domElement;
+      customCursorImg.style.display = pointerLocked ? 'block' : 'none';
+      if (!pointerLocked) pauseGame();
+    }
 
-    bgUrlInput.addEventListener('change', () => {
-      const url = bgUrlInput.value.trim();
-      if(url) {
+    function animate() {
+      requestAnimationFrame(animate);
+      targets.forEach(t => {
+        t.rotation.x += 0.01;
+        t.rotation.y += 0.01;
+      });
+      renderer.render(scene, camera);
+      if (pointerLocked) {
+        customCursorImg.style.left = `${window.innerWidth/2 - customCursorImg.width/2}px`;
+        customCursorImg.style.top = `${window.innerHeight/2 - customCursorImg.height/2}px`;
+      }
+    }
+
+    function updateBackground(url) {
+      if (!url) {
+        document.body.style.background = 'black';
+        document.body.style.backgroundImage = '';
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
         document.body.style.backgroundImage = `url(${url})`;
         document.body.style.backgroundSize = 'cover';
         document.body.style.backgroundPosition = 'center';
-      } else {
+        document.body.style.backgroundRepeat = 'no-repeat';
+      };
+      img.onerror = () => {
+        document.body.style.background = 'black';
         document.body.style.backgroundImage = '';
-      }
-    });
+        alert('⚠️ Background image failed to load.');
+      };
+      img.src = url;
+    }
 
-    cursorUrlInput.addEventListener('change', () => {
-      const url = cursorUrlInput.value.trim();
-      if(url) {
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 10;
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      updateSettingsValues();
+      createTargets(parseInt(targetCountInput.value));
+      updateTimer(parseInt(sessionLengthInput.value));
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      window.addEventListener('click', onClick);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('pointerlockchange', onPointerLockChange);
+
+      startBtn.addEventListener('click', startGame);
+      pauseBtn.addEventListener('click', pauseGame);
+      resetBtn.addEventListener('click', resetGame);
+
+      [targetCountInput, targetSizeInput, spawnSpeedInput, sessionLengthInput, sensitivityInput].forEach(el =>
+        el.addEventListener('input', updateSettingsValues)
+      );
+
+      bgUrlInput.addEventListener('change', () => updateBackground(bgUrlInput.value.trim()));
+      bgUrlInput.addEventListener('keyup', e => {
+        if (e.key === 'Enter') updateBackground(bgUrlInput.value.trim());
+      });
+
+      cursorUrlInput.addEventListener('change', () => {
+        const url = cursorUrlInput.value.trim();
         customCursorImg.src = url;
-      } else {
-        customCursorImg.src = '';
-        customCursorImg.style.display = 'none';
-      }
-    });
+      });
 
-    startBtn.addEventListener('click', startGame);
-    pauseBtn.addEventListener('click', pauseGame);
-    resetBtn.addEventListener('click', resetGame);
+      animate();
+    }
 
     init();
   </script>
