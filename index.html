@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3DimensionalCharisma – Pointer Lock + Move + Crosshair</title>
+  <title>3DimensionalCharisma – Gravity + Jump</title>
   <style>
     html, body {
       margin: 0; padding: 0; overflow: hidden; background: black; height: 100%;
@@ -54,7 +54,7 @@
   scene.background = new THREE.Color(0x000000);
 
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 2, 5);
+  camera.position.set(0, 1.5, 5); // start at ground height (y=1.5)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -84,6 +84,13 @@
   const moveSpeed = 0.1;
   const keys = {};
 
+  // Physics variables
+  let velocityY = 0;
+  const gravity = -30; // gravity acceleration (units per second^2)
+  const jumpSpeed = 10; // initial jump velocity
+  const groundHeight = 1.5; // y-position of the floor/player standing height
+  let canJump = false;
+
   // Request pointer lock on any click
   window.addEventListener('click', () => {
     if (!isLocked) {
@@ -104,20 +111,37 @@
     pitch = Math.max(-pitchLimit, Math.min(pitchLimit, pitch));
   });
 
-  window.addEventListener('keydown', e => { keys[e.code] = true; });
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+
+    // Jump on Spacebar, only if canJump
+    if (e.code === 'Space' && canJump) {
+      velocityY = jumpSpeed;
+      canJump = false;
+    }
+  });
+
   window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  let prevTime = performance.now();
 
   function animate() {
     requestAnimationFrame(animate);
 
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000; // seconds
+    prevTime = time;
+
     cube.rotation.y += 0.01;
 
+    // Calculate direction vector from yaw & pitch (ignore pitch for movement)
     const direction = new THREE.Vector3(
-      Math.cos(pitch) * Math.sin(yaw),
-      Math.sin(pitch),
-      Math.cos(pitch) * Math.cos(yaw)
+      Math.sin(yaw),
+      0,
+      Math.cos(yaw)
     );
 
+    // Calculate right vector for strafing
     const right = new THREE.Vector3(
       Math.sin(yaw - Math.PI / 2),
       0,
@@ -125,15 +149,31 @@
     );
 
     if (isLocked) {
+      // Move on XZ plane only
       if (keys['KeyW']) camera.position.add(direction.clone().multiplyScalar(moveSpeed));
       if (keys['KeyS']) camera.position.add(direction.clone().multiplyScalar(-moveSpeed));
       if (keys['KeyA']) camera.position.add(right.clone().multiplyScalar(-moveSpeed));
       if (keys['KeyD']) camera.position.add(right.clone().multiplyScalar(moveSpeed));
     }
 
-    if (camera.position.y < 1.5) camera.position.y = 1.5;
+    // Apply gravity
+    velocityY += gravity * delta;
+    camera.position.y += velocityY * delta;
 
-    const lookAtPos = new THREE.Vector3().addVectors(camera.position, direction);
+    // Check if on ground
+    if (camera.position.y <= groundHeight) {
+      velocityY = 0;
+      camera.position.y = groundHeight;
+      canJump = true;
+    }
+
+    // Look at where mouse points, including pitch
+    const lookDir = new THREE.Vector3(
+      Math.cos(pitch) * Math.sin(yaw),
+      Math.sin(pitch),
+      Math.cos(pitch) * Math.cos(yaw)
+    );
+    const lookAtPos = new THREE.Vector3().addVectors(camera.position, lookDir);
     camera.lookAt(lookAtPos);
 
     renderer.render(scene, camera);
