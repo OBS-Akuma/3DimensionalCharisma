@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>3DimensionalCharisma – Bunny Hop Movement</title>
+  <title>3DimensionalCharisma – Zombies & Knife Combat</title>
   <style>
     html, body {
       margin: 0; padding: 0; overflow: hidden; background: black; height: 100%;
       cursor: pointer;
+      color: white;
+      font-family: Arial, sans-serif;
     }
     canvas {
       display: block;
     }
-    /* Crosshair styling */
     #crosshair {
       position: fixed;
       top: 50%;
@@ -42,11 +43,22 @@
       width: 100%;
       margin-top: -1px;
     }
+    #info {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 110;
+      font-size: 18px;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
 
 <div id="crosshair"></div>
+<div id="info">Zombies remaining: <span id="zcount">0</span></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 <script>
@@ -72,15 +84,7 @@
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
 
-  // Cube in center
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x00ff00 })
-  );
-  cube.position.set(0, 0.5, 0);
-  scene.add(cube);
-
-  // Walls (4) around the floor edges
+  // Walls
   const wallHeight = 2;
   const wallThickness = 0.5;
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
@@ -125,10 +129,6 @@
   let pitch = 0;
   const pitchLimit = Math.PI / 2 - 0.1;
   const baseSpeed = 0.1;
-  const maxSpeed = 0.25;
-  let moveSpeed = baseSpeed;
-  const acceleration = 0.02;
-  const friction = 0.01;
   const keys = {};
 
   // Physics variables for gravity and jump
@@ -137,6 +137,38 @@
   const jumpSpeed = 10;
   const groundHeight = 1.5;
   let canJump = false;
+
+  // Zombies
+  const zombieCount = 5;
+  const zombies = [];
+
+  // Create zombie meshes with positions around the map
+  function spawnZombies() {
+    for(let i = 0; i < zombieCount; i++) {
+      const zombie = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1.5, 1),
+        new THREE.MeshStandardMaterial({ color: 0xff0000 })
+      );
+      // Random position on the floor, avoiding spawn near player start
+      let x, z;
+      do {
+        x = (Math.random() - 0.5) * floorSize * 0.9;
+        z = (Math.random() - 0.5) * floorSize * 0.9;
+      } while (Math.sqrt((x - camera.position.x)**2 + (z - camera.position.z)**2) < 5);
+
+      zombie.position.set(x, 0.75, z);
+      zombie.health = 1;
+      scene.add(zombie);
+      zombies.push(zombie);
+    }
+    updateZombieCount();
+  }
+
+  function updateZombieCount() {
+    document.getElementById('zcount').textContent = zombies.length;
+  }
+
+  spawnZombies();
 
   // Request pointer lock on click
   window.addEventListener('click', () => {
@@ -161,11 +193,15 @@
   window.addEventListener('keydown', e => {
     keys[e.code] = true;
 
+    // Jump
     if (e.code === 'Space' && canJump) {
       velocityY = jumpSpeed;
       canJump = false;
-      // Increase moveSpeed on jump (bunny hop effect)
-      moveSpeed = Math.min(moveSpeed + acceleration, maxSpeed);
+    }
+
+    // Attack (knife) when pressing E
+    if (e.code === 'KeyE') {
+      attackZombies();
     }
   });
 
@@ -192,6 +228,22 @@
     return false;
   }
 
+  // Attack function - remove zombies in range
+  function attackZombies() {
+    const knifeRange = 1.5;
+    const playerPos = camera.position;
+
+    for (let i = zombies.length - 1; i >= 0; i--) {
+      const zombie = zombies[i];
+      const dist = zombie.position.distanceTo(playerPos);
+      if (dist <= knifeRange) {
+        scene.remove(zombie);
+        zombies.splice(i, 1);
+        updateZombieCount();
+      }
+    }
+  }
+
   let prevTime = performance.now();
 
   function animate() {
@@ -201,8 +253,25 @@
     const delta = (time - prevTime) / 1000;
     prevTime = time;
 
-    cube.rotation.y += 0.01;
+    // Zombies move toward player slowly
+    zombies.forEach(zombie => {
+      const dir = new THREE.Vector3().subVectors(camera.position, zombie.position);
+      dir.y = 0;
+      const distance = dir.length();
 
+      if (distance > 0.1) {
+        dir.normalize();
+        const speed = 0.7 * delta; // Zombie speed
+        const newPos = zombie.position.clone().add(dir.multiplyScalar(speed));
+
+        // Check collision with walls before moving zombie
+        if (!checkCollision(newPos)) {
+          zombie.position.copy(newPos);
+        }
+      }
+    });
+
+    // Player movement
     const forwardDir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const rightDir = new THREE.Vector3(Math.sin(yaw - Math.PI / 2), 0, Math.cos(yaw - Math.PI / 2));
 
@@ -217,10 +286,7 @@
 
     if (moveVector.length() > 0) {
       moveVector.normalize();
-      moveVector.multiplyScalar(moveSpeed);
-    } else {
-      // Apply friction to slow down if not moving
-      moveSpeed = Math.max(moveSpeed - friction, baseSpeed);
+      moveVector.multiplyScalar(0.1);
     }
 
     const newPosition = camera.position.clone();
@@ -240,11 +306,6 @@
       camera.position.y = groundHeight;
       velocityY = 0;
       canJump = true;
-
-      // Reset moveSpeed to base when landing
-      if (!keys['Space']) {
-        moveSpeed = baseSpeed;
-      }
     }
 
     const lookDir = new THREE.Vector3(
