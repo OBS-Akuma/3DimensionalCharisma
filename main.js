@@ -114,9 +114,42 @@ knife.position.set(0.3, -0.3, -0.5);
 camera.add(knife);
 scene.add(camera);
 
+// Player health
+let playerHP = 100;
+const maxHP = 100;
+
+// Update health display
+function updateHP() {
+  let hpEl = document.getElementById('hp');
+  if (!hpEl) {
+    hpEl = document.createElement('div');
+    hpEl.id = 'hp';
+    hpEl.style.position = 'fixed';
+    hpEl.style.bottom = '10px';
+    hpEl.style.left = '10px';
+    hpEl.style.color = 'white';
+    hpEl.style.fontSize = '18px';
+    hpEl.style.background = 'rgba(0,0,0,0.5)';
+    hpEl.style.padding = '8px 12px';
+    hpEl.style.borderRadius = '6px';
+    document.body.appendChild(hpEl);
+  }
+  hpEl.textContent = `HP: ${playerHP} / ${maxHP}`;
+}
+updateHP();
+
+let gameOver = false;
+
+function endGame() {
+  gameOver = true;
+  alert('Game Over! You died.');
+  // Optionally, reload or reset game
+  // location.reload();
+}
+
 // Pointer lock controls
 window.addEventListener('click', () => {
-  if (!isLocked) {
+  if (!isLocked && !gameOver) {
     document.body.requestPointerLock();
   }
 });
@@ -135,6 +168,7 @@ document.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('keydown', e => {
+  if (gameOver) return;
   keys[e.code] = true;
 
   if (e.code === 'Space' && canJump) {
@@ -151,6 +185,7 @@ window.addEventListener('keyup', e => {
   keys[e.code] = false;
 });
 
+// Simple collision detection with walls
 function checkCollision(newPos) {
   const radius = 0.4;
   for (const wall of walls) {
@@ -169,7 +204,9 @@ function checkCollision(newPos) {
   return false;
 }
 
+// Attack function - remove zombies in range
 function attackZombies() {
+  if (gameOver) return;
   const knifeRange = 1.5;
   const playerPos = camera.position;
 
@@ -184,16 +221,28 @@ function attackZombies() {
   }
 }
 
+// Zombie attack variables
+const zombieAttackRange = 1.2;
+const zombieAttackDamage = 10;
+const zombieAttackCooldown = 1.5; // seconds
+let lastZombieAttackTime = 0;
+
 let prevTime = performance.now();
 
 function animate() {
   requestAnimationFrame(animate);
+
+  if (gameOver) {
+    renderer.render(scene, camera);
+    return;
+  }
 
   const time = performance.now();
   const delta = (time - prevTime) / 1000;
   prevTime = time;
 
   zombies.forEach(zombie => {
+    // Move zombie toward player
     const dir = new THREE.Vector3().subVectors(camera.position, zombie.position);
     dir.y = 0;
     const distance = dir.length();
@@ -205,6 +254,19 @@ function animate() {
 
       if (!checkCollision(newPos)) {
         zombie.position.copy(newPos);
+      }
+    }
+
+    // Zombie attacks player if close enough and cooldown passed
+    if (distance <= zombieAttackRange) {
+      if (time / 1000 - lastZombieAttackTime > zombieAttackCooldown) {
+        playerHP -= zombieAttackDamage;
+        updateHP();
+        lastZombieAttackTime = time / 1000;
+
+        if (playerHP <= 0) {
+          endGame();
+        }
       }
     }
   });
@@ -235,6 +297,7 @@ function animate() {
     camera.position.z = newPosition.z;
   }
 
+  // Gravity & jump
   velocityY += gravity * delta;
   camera.position.y += velocityY * delta;
 
