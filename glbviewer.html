@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>GLB Viewer</title>
+  <title>Kirka GLB Viewer</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
+    body { margin: 0; overflow: hidden; background: #111; }
     canvas { display: block; }
   </style>
 </head>
@@ -15,7 +15,9 @@
   import { GLTFLoader } from 'https://cdn.skypack.dev/three/examples/jsm/loaders/GLTFLoader.js';
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  scene.background = new THREE.Color(0x111111);
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
   camera.position.set(0, 1.5, 3);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -25,21 +27,34 @@
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
-  const light1 = new THREE.HemisphereLight(0xffffff, 0x444444);
-  scene.add(light1);
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
 
-  const light2 = new THREE.DirectionalLight(0xffffff, 1);
-  light2.position.set(5, 10, 7.5);
-  scene.add(light2);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  directionalLight.position.set(5, 10, 5);
+  scene.add(directionalLight);
 
+  // Load Kirka GLB
   const loader = new GLTFLoader();
-  const glbUrl = 'https://kirka.io/assets/glb/e54104dfacc75e07f3d120123fe527a3.glb'; 
-  loader.load(glbUrl, (gltf) => {
-    scene.add(gltf.scene);
-  }, undefined, (error) => {
-    console.error('An error happened loading the GLB:', error);
+  const url = 'https://kirka.io/assets/glb/e54104dfacc75e07f3d120123fe527a3.glb';
+
+  loader.load(url, (gltf) => {
+    const model = gltf.scene;
+
+    // Optional: scale and center the model
+    model.scale.set(1.5, 1.5, 1.5);
+    model.position.set(0, 0, 0);
+    scene.add(model);
+  }, undefined, (err) => {
+    console.error('Error loading GLB:', err);
   });
 
+  // Ground plane (for visual reference)
+  const gridHelper = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
+  scene.add(gridHelper);
+
+  // Animation loop
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
