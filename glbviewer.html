@@ -10,9 +10,9 @@
 </head>
 <body>
 <script type="module">
-  import * as THREE from 'https://cdn.skypack.dev/three';
-  import { OrbitControls } from 'https://cdn.skypack.dev/three/examples/jsm/controls/OrbitControls.js';
-  import { GLTFLoader } from 'https://cdn.skypack.dev/three/examples/jsm/loaders/GLTFLoader.js';
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+  import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js';
+  import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
@@ -50,11 +50,11 @@
     console.error('Error loading GLB:', err);
   });
 
-  // Ground plane (for visual reference)
+  // Ground plane
   const gridHelper = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
   scene.add(gridHelper);
 
-  // Animation loop
+  // Animate
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -64,7 +64,7 @@
   animate();
 
   window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
